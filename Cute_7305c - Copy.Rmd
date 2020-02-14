@@ -1,0 +1,382 @@
+---
+title: "Tennis Data"
+author: " Neema"
+date: "September 9, 2019"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+---
+
+# Clear the global environment
+
+* Clearing the enviorment before start of programming to free up RAM space
+
+```{r}
+rm(list = ls())
+```
+
+# Agenda 
+
+* Get the data
+
+* Data Pre-processing
+
+* Build a model
+
+* Classification predictions
+
+* Results/Metrics
+
+# Reading and Understanding the Data
+
+## Data Domain and Format
+
+* The data given is a .csv file.
+
+* Train and test datasets are given separately.
+
+* Read in the data using the "read.csv()" function.
+
+
+*We have to make sure the dataset is located in our current working directory, else we can change our working directory using the "setwd()" function
+
+```{r}
+setwd("D:/insofe/7305 cute")
+```
+
+* To get the current working directory
+
+```{r}
+getwd()
+```
+
+* Load the Dataset given.
+
+```{r}
+tennis_data = read.csv("train-1542197608821.csv", header = TRUE) # reading the data from which we create models
+```
+
+## Data Description
+
+*The given problem is a tennis dataset which is a classification problem.Every tennis match is made up of a sequence of points. A point begins with a serve and players exchange shots until a player makes an error or is unable to return a shot in play.
+
+* Problem Statement:
+
+*We need to classify the player into one of the following three categories : Winner,Unforced error,Forced error.
+*Winner Description: A winner is a shot that was in play, not touched by the opponent, and ends with the point going to the player who made the shot
+*The other two categories are two distinct types of errors where both end with the point going to the player who did not make the shot.
+
+* The dataset has the following attributes:
+
+__Response Variable (desired target):__
+1 - Outcome
+  W  - Winner
+  FE - Forced Error
+  UE - Unforced Error
+  
+__Other Variable (Feature attributes):__  
+2 - Rally:  is a collective name given to a sequence of back and forth shots between players, within a point. 
+3 - Serve: The starting stroke of each point. The ball must be hit into the opponent's service box.
+4 - Depth: depth will force your opponent to hit one or two additional shots during every point, which will often lead them to make errors.
+5 - Gender: Male or Female
+6 - ID: ID of data points
+7 - Previous.speed: speed of the previous serve
+
+# Understanding the data/ EDA (Exploratory Data Analysis)
+
+* We use head() and tail() function to get the first 6 rows of the given dataset
+
+```{r}
+head(tennis_data)
+```
+
+* To get the last 6 rows of the given dataset
+
+```{r}
+tail(tennis_data)
+```
+
+* Use the str(), summary() functions to get the dimensions and type of attributes in the dataset.
+* Verify the data types assigned to the variables in the dataset
+
+```{r}
+str(tennis_data)
+```
+
+** This Dataset has 8001 observations and 27 variables.
+** The outcome column is the target variable to predict.
+
+```{r}
+summary(tennis_data)
+```
+
+# Data Pre-Processing
+
+## Missing values
+
+* Verify if the dataset has missing values
+
+```{r}
+sum(is.na(tennis_data))
+colSums(is.na(tennis_data))
+```
+
+*  It shows that no null values is present 
+
+## To check the column names
+
+* To get the column names of the given dataset.
+
+```{r}
+colnames(tennis_data)
+```
+
+## Converting attributes 
+
+* Converting the attributes into into appropriate data types
+
+```{r}
+attr = colnames(tennis_data)
+cat_attr = c("serve", "hitpoint", "outside.sideline", "outside.baseline", "same.side", "previous.hitpoint", "server.is.impact.player", "outcome", "gender")
+num_attr = setdiff(attr,cat_attr)
+cat_data = data.frame(sapply(tennis_data[,cat_attr],as.factor))
+num_data = data.frame(sapply(tennis_data[,num_attr],as.character))
+num_data = data.frame(sapply(tennis_data[,num_attr],as.numeric))
+tennis_data = cbind(num_data,cat_data)
+```
+
+## Dropping columns 
+
+* ID column is not relevant
+
+```{r}
+tennis_data$ID = NULL
+
+str(tennis_data)
+```
+
+## Class imbalance
+```{r}
+#tennis_data
+table(tennis_data$outcome) # FE:UE:W is 1818:3501:2682 whish seems to be acceptable
+
+```
+
+# Data Visualization 
+## We use boxplot to see the outliers
+
+```{r}
+par(mfrow=c(1,3))
+for(i in 1:17) 
+  {
+  boxplot(tennis_data[,i], main=names(tennis_data)[i],col="green")
+}
+#Any dots outside the whiskers are good candidates for outliers.
+```
+
+## Correlation Plot
+
+* Checking for correlations between the variables in the dataset
+
+```{r}
+library(corrplot)
+corrplot(cor(tennis_data[,1:17], use = "complete.obs"), method = "number") 
+
+# the correlation between each pair of numeric variables. These pair-wise correlations can be plotted in a correlation matrix plot to given an idea of which variables change together.
+# if we use complete.obs then missing values are handled by case wise deletion, number method gives the correlation coefficient in form of number, we can also use circle,elipse..  
+
+```
+
+##Exploring a few bi-variate relationships between columns
+
+```{r fig.height= 8, fig.width = 9}
+par(mfrow = c(2,2))
+plot(tennis_data$player.depth, tennis_data$player.impact.depth, ylab = "player.depth", xlab = "player.impact.depth") 
+plot(tennis_data$previous.time.to.net, tennis_data$previous.net.clearance, ylab = "previous.time.to.net", xlab = "previous.net.clearance") 
+plot(tennis_data$previous.speed, tennis_data$player.impact.depth, ylab = "previous.speed", xlab = "player.impact.depth")
+
+```
+
+# Build a Model
+
+# Split the data into Train and Test
+
+* We split the data 70/30 into train and test sets
+* Setting the seed as "789"
+
+```{r}
+
+set.seed(789)
+
+train_row = sample(1:nrow(tennis_data), nrow(tennis_data)*0.7)
+train_data = tennis_data[train_row,] #subsetting tennis_data data into train_data
+test_data = tennis_data[-train_row,] ##subsetting tennis_data data into test_data
+
+```
+
+
+# Build the classification model by using RandomForest
+
+* Build the model by using RandomForest.
+* Here we are using randomForest library
+
+```{r}
+library(randomForest)
+
+model = randomForest(outcome~., data = train_data, keep.forest=TRUE, ntree=50)
+
+
+```
+
+# View results and understand important attributes
+
+## Print and understand the model
+
+* It gives the idea about the model
+* The number of trees used here is 50
+* Number of variables tried at each split is 5 (by default).
+* Error rate is 14.16
+
+```{r}
+print(model)
+```
+
+```{r}
+plot(model)
+```
+
+# Important attributes
+
+* It gives the important attributes using Gini Index
+
+```{r}
+#model$importance
+round(importance(model), 2) #It round upto 2 decimal
+```
+
+
+# Extract and store important variables obtained from the random forest model
+
+* Extracting the important variables from the random forest model and store that variables also
+
+```{r}
+rf_imp_attr = data.frame(model$importance)
+rf_imp_attr = data.frame(row.names(rf_imp_attr),rf_imp_attr[,1])
+colnames(rf_imp_attr) = c('attributes', 'importance')
+rf_imp_attr = rf_imp_attr[order(rf_imp_attr$importance, decreasing = TRUE),]
+```
+
+
+# Plot important attributes
+
+* Here we are plotting the graph according to the Gini Index values
+```{r}
+varImpPlot(model)
+```
+
+# Predict on Train and Test datasets and calculate accuracy
+## Predict on Train data   
+* Prediction on the Train data
+
+```{r}
+pred_Train = predict(model,train_data[,setdiff(names(train_data),"outcome")],type="response", norm.votes=TRUE)# norm.votes has values True or false, if true votes will be normalized.
+# type has values response,prob or votes. response:predicted values
+pred_Train
+```
+
+## Build confusion matrix and find accuracy
+*Build the confusion matrix and check the accuracy of the model in train data
+
+```{r}
+cm_train = table("actual" = train_data$outcome, "predicted" = pred_Train);
+accu_train_imp = sum(diag(cm_train))/sum(cm_train)
+accu_train_imp
+```
+
+## Predict on test data
+* Prediction on the test data 
+```{r}
+pred_Test = predict(model,test_data[,setdiff(names(test_data),"outcome")],type = "response", norm.votes=TRUE) # norm.votes has values True or false, if true votes will be normalized.
+# type has values response,prob or votes. response:predicted values
+pred_Test
+```
+
+## Build confusion matrix and find accuracy
+*Build the confusion matrix and check the accuracy of the model in test data
+```{r}
+cm_test =  table("actual" = test_data$outcome, "predicted" = pred_Test);
+accu_test_imp = sum(diag(cm_test))/sum(cm_test)
+accu_test_imp
+```
+
+# Labelling the unseen data
+* Labelling the unseen data for predicting the outcome  
+
+```{r}
+unseen_data = read.csv("test-1542197608821.csv", header = T)
+```
+
+```{r}
+head(unseen_data) #To get the first 6 rows in unseen data
+tail(unseen_data) #To get the last 6 rows in unseen data
+str(unseen_data)  #We can see that the data types of each attributes of unseen_data
+summary(unseen_data) #checking the central tendencies of the unseen data
+
+sum(is.na(unseen_data)) #Verify if the unseen data has missing values
+
+
+```
+
+
+```{r}
+rownames(unseen_data)=unseen_data$ID
+unseen_data$ID = NULL #ID column is not relevant,so drop that column
+```
+
+## Converting into appropriate attributes
+
+```{r}
+eval_attr = colnames(unseen_data)
+eval_cat_attr = c("hitpoint", "outside.sideline", "outside.baseline", "same.side", "previous.hitpoint", "server.is.impact.player", "serve", "gender")
+eval_num_attr = setdiff(eval_attr,eval_cat_attr)
+eval_cat_data = data.frame(sapply(unseen_data[,eval_cat_attr],as.factor))
+eval_num_data = data.frame(sapply(unseen_data[,eval_num_attr],as.character))
+eval_num_data = data.frame(sapply(unseen_data[,eval_num_attr],as.numeric))
+unseen_data = cbind(eval_num_data,eval_cat_data)
+```
+
+## Prediction on unseen data
+
+```{r}
+pred_unseen_data = predict(model,unseen_data[,setdiff(names(unseen_data),"outcome")],type = "response", norm.votes=TRUE) 
+pred_unseen_data
+Pred_unseen_table = data.frame(pred_unseen_data)
+write.table(Pred_unseen_table, file = "Pred_unseen_table.csv")
+
+```
+
+#Rebuilding model with full train data to predict on unseen data
+* Rebuild the model without spliting the train data into train and test.
+
+```{r}
+model_fullT = randomForest(outcome~., data = tennis_data, keep.forest=TRUE, ntree=50)
+print(model_fullT)
+plot(model_fullT)
+round(importance(model_fullT), 2)
+pred_Train_fullT = predict(model_fullT,tennis_data[,setdiff(names(tennis_data),"outcome")],type="response", norm.votes=TRUE)
+#pred_Train_fullT
+cm_train_fullT = table("actual" = tennis_data$outcome, "predicted" = pred_Train_fullT);
+accu_train_imp_fullT = sum(diag(cm_train_fullT))/sum(cm_train_fullT)
+accu_train_imp_fullT
+
+pred_unseen_data_fullT = predict(model_fullT,unseen_data[,setdiff(names(unseen_data),"outcome")],type = "response", norm.votes=TRUE)
+#pred_unseen_data_fullT
+Pred_unseen_table_fullT = data.frame(pred_unseen_data_fullT)
+write.table(Pred_unseen_table_fullT, file = "Pred_unseen_table_fullT.csv")
+```
+
